@@ -31,8 +31,24 @@
 #include <linux/compiler.h>
 #include <linux/moduleparam.h>
 #include <linux/wakeup_reason.h>
+#include <linux/soc/qcom/smem_state.h>
 
 #include "power.h"
+
+#ifdef CONFIG_QCOM_SMP2P_SLEEPSTATE
+#define PROC_AWAKE_ID 12 /* 12th bit */
+#define AWAKE_BIT BIT(PROC_AWAKE_ID)
+extern struct qcom_smem_state *smem_state;
+
+static void sleepstate_set_awake(bool awake)
+{
+	if (!IS_ERR_OR_NULL(smem_state))
+		qcom_smem_state_update_bits(smem_state, AWAKE_BIT,
+					    awake ? AWAKE_BIT : 0);
+}
+#else
+static inline void sleepstate_set_awake(bool awake) { }
+#endif
 
 const char * const pm_labels[] = {
 	[PM_SUSPEND_TO_IDLE] = "freeze",
@@ -624,7 +640,9 @@ int pm_suspend(suspend_state_t state)
 		return -EINVAL;
 
 	pr_info("suspend entry (%s)\n", mem_sleep_labels[state]);
+	sleepstate_set_awake(false);
 	error = enter_state(state);
+	sleepstate_set_awake(true);
 	if (error) {
 		suspend_stats.fail++;
 		dpm_save_failed_errno(error);
