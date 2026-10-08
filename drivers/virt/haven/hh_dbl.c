@@ -8,6 +8,8 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
+#include <linux/sched.h>
+#include <linux/wait.h>
 
 #include <linux/haven/hh_dbl.h>
 #include <linux/haven/hh_errno.h>
