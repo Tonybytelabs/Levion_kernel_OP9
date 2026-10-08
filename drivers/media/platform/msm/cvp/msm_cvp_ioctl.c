@@ -641,6 +641,7 @@ long cvp_unblocked_ioctl(struct file *filp,
 	return cvp_ioctl(inst, cmd, arg);
 }
 
+#ifdef CONFIG_COMPAT
 long cvp_compat_ioctl(struct file *filp,
 		unsigned int cmd, unsigned long arg)
 {
@@ -654,3 +655,4 @@ long cvp_compat_ioctl(struct file *filp,
 	inst = filp->private_data;
 	return cvp_ioctl(inst, cmd, (unsigned long)compat_ptr(arg));
 }
+#endif

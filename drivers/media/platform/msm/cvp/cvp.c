@@ -80,7 +80,9 @@ static const struct file_operations cvp_fops = {
 	.open = cvp_open,
 	.release = cvp_close,
 	.unlocked_ioctl = cvp_unblocked_ioctl,
+#ifdef CONFIG_COMPAT
 	.compat_ioctl = cvp_compat_ioctl,
+#endif
 	.poll = cvp_poll,
 };
 
