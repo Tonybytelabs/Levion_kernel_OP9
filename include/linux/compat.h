@@ -969,6 +969,11 @@ int kcompat_sys_fstatfs64(unsigned int fd, compat_size_t sz,
 #define in_compat_syscall in_compat_syscall
 static inline bool in_compat_syscall(void) { return false; }
 
+static inline void __user *compat_ptr(compat_uptr_t uptr)
+{
+	return (void __user *)(unsigned long)uptr;
+}
+
 #endif /* CONFIG_COMPAT */
 
 #endif /* _LINUX_COMPAT_H */
