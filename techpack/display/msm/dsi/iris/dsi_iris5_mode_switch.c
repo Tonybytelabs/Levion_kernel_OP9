@@ -169,6 +169,7 @@ static bool iris_frc_setting_check(void)
 		{16, 40 | 60 << 8,  2 | 3 << 11,  1},
 		{18, 40 | 90 << 8,  4 | 9 << 11,  2},
 		{13, 45 | 90 << 8,  2 | 4 << 11,  1},
+		{14, 40 | 120 << 8, 2 | 6 << 11,  1},
 	};
 
 	struct frc_lut_config video_config_table[IRIS_FRC_V2_LUT_TABLE_NUM+8] = {
@@ -198,6 +199,7 @@ static bool iris_frc_setting_check(void)
 		{16, 40 | 60 << 8,  2 | 3 << 11,  1},
 		{18, 40 | 90 << 8,  4 | 9 << 11,  2},
 		{13, 45 | 90 << 8,  2 | 4 << 11,  1},
+		{14, 40 | 120 << 8, 2 | 6 << 11,  1},
 	};
 
 	if (pcfg->rx_mode == DSI_OP_CMD_MODE) {
