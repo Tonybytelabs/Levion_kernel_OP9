@@ -4550,6 +4550,7 @@ vm_fault_t __handle_speculative_fault(struct mm_struct *mm,
 	pud_t pudval;
 	int seq;
 	vm_fault_t ret;
+	bool uffd_missing_sigbus = false;
 
 	/* Clear flags that may lead to release the mmap_sem to retry */
 	flags &= ~(FAULT_FLAG_ALLOW_RETRY|FAULT_FLAG_KILLABLE);
@@ -4566,14 +4567,27 @@ vm_fault_t __handle_speculative_fault(struct mm_struct *mm,
 		return VM_FAULT_RETRY;
 
 	vmf.flags = flags;
-	if (!vmf_allows_speculation(&vmf))
-		return VM_FAULT_RETRY;
-
 	vmf.vma_flags = READ_ONCE(vmf.vma->vm_flags);
 	vmf.vma_page_prot = READ_ONCE(vmf.vma->vm_page_prot);
 
-	/* Can't call userland page fault handler in the speculative path */
-	if (unlikely(vmf.vma_flags & __VM_UFFD_FLAGS))
+#ifdef CONFIG_USERFAULTFD
+	/*
+	 * Only support SPF for SIGBUS+MISSING userfaults in private anonymous
+	 * VMAs. Rest all should be retried with mmap_lock.
+	 */
+	if (unlikely(vmf.vma_flags & __VM_UFFD_FLAGS)) {
+		uffd_missing_sigbus = vma_is_anonymous(vmf.vma) &&
+					(vmf.vma_flags & VM_UFFD_MISSING) &&
+					userfaultfd_using_sigbus(vmf.vma);
+		if (!uffd_missing_sigbus)
+			return VM_FAULT_RETRY;
+		/* Not having anon_vma implies that the PTE is missing */
+		if (!vmf.vma->anon_vma)
+			goto out_sigbus;
+	}
+#endif
+
+	if (!vmf_allows_speculation(&vmf))
 		return VM_FAULT_RETRY;
 
 	if (vmf.vma_flags & VM_GROWSDOWN || vmf.vma_flags & VM_GROWSUP)
@@ -4691,6 +4705,9 @@ vm_fault_t __handle_speculative_fault(struct mm_struct *mm,
 
 	local_irq_enable();
 
+	if (!vmf.pte && uffd_missing_sigbus)
+		goto out_sigbus;
+
 	/*
 	 * We need to re-validate the VMA after checking the bounds, otherwise
 	 * we might have a false positive on the bounds.
@@ -4729,7 +4746,22 @@ vm_fault_t __handle_speculative_fault(struct mm_struct *mm,
 
 out_walk:
 	local_irq_enable();
-	return VM_FAULT_RETRY;
+	/*
+	 * Failing page-table walk is similar to page-missing so give an
+	 * opportunity to SIGBUS+MISSING userfault to handle it before retrying
+	 * with mmap_lock
+	 */
+	if (!uffd_missing_sigbus)
+		return VM_FAULT_RETRY;
+
+out_sigbus:
+	/*
+	 * We don't return VM_FAULT_RETRY so the caller is not expected to
+	 * retrieve the fetched VMA.
+	 */
+	put_vma(vmf.vma);
+	*vma = NULL;
+	return VM_FAULT_SIGBUS;
 
 out_segv:
 	/*
