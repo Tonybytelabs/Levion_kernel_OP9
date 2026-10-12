@@ -1154,11 +1154,12 @@ void *zs_obj_read_begin(struct zs_pool *pool, unsigned long handle,
 	class = zspage_class(pool, zspage);
 	off = offset_in_page(class->size * obj_idx);
 
+	/* zpool callers do not know the object length */
 	if (!mem_len)
-		/* zpool callers do not know the object length */
-		mem_len = class->size;
-	else if (!ZsHugePage(zspage))
-		mem_len += ZS_HANDLE_SIZE;
+		mem_len = class->size - (ZsHugePage(zspage) ? 0 : ZS_HANDLE_SIZE);
+
+	if (!ZsHugePage(zspage))
+		off += ZS_HANDLE_SIZE;
 
 	if (off + mem_len <= PAGE_SIZE) {
 		/* this object is contained entirely within a page */
@@ -1179,9 +1180,6 @@ void *zs_obj_read_begin(struct zs_pool *pool, unsigned long handle,
 				 0, sizes[1]);
 	}
 
-	if (!ZsHugePage(zspage))
-		addr += ZS_HANDLE_SIZE;
-
 	return addr;
 }
 EXPORT_SYMBOL_GPL(zs_obj_read_begin);
@@ -1201,15 +1199,14 @@ void zs_obj_read_end(struct zs_pool *pool, unsigned long handle,
 	class = zspage_class(pool, zspage);
 	off = offset_in_page(class->size * obj_idx);
 
+	/* zpool callers do not know the object length */
 	if (!mem_len)
-		/* zpool callers do not know the object length */
-		mem_len = class->size;
-	else if (!ZsHugePage(zspage))
-		mem_len += ZS_HANDLE_SIZE;
+		mem_len = class->size - (ZsHugePage(zspage) ? 0 : ZS_HANDLE_SIZE);
+
+	if (!ZsHugePage(zspage))
+		off += ZS_HANDLE_SIZE;
 
 	if (off + mem_len <= PAGE_SIZE) {
-		if (!ZsHugePage(zspage))
-			off += ZS_HANDLE_SIZE;
 		handle_mem -= off;
 		kunmap_local(handle_mem);
 	}
