@@ -24,7 +24,6 @@ struct sugov_tunables {
 	unsigned int		hispeed_load;
 	unsigned int		hispeed_freq;
 	unsigned int		rtg_boost_freq;
-	unsigned int		dvfs_headroom;
 	bool			pl;
 };
 
@@ -296,8 +295,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
  *
  * next_freq = C * curr_freq * util_raw / max
  *
- * C is the per-policy dvfs_headroom tunable, in percent. C = 1.25 puts the
- * frequency tipping point at (util / max) = 0.8.
+ * Take C = 1.25 for the frequency tipping point at (util / max) = 0.8.
  *
  * The lowest driver-supported frequency which is equal or greater than the raw
  * next_freq (as calculated above) is returned, subject to policy min/max and
@@ -315,8 +313,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 	if (next_freq)
 		freq = next_freq;
 	else
-		freq = (unsigned long)freq * sg_policy->tunables->dvfs_headroom /
-		       100 * util / max;
+		freq = map_util_freq(util, freq, max);
 
 	trace_sugov_next_freq(policy->cpu, util, max, freq);
 	if (freq == sg_policy->cached_raw_freq && !sg_policy->need_freq_update)
@@ -594,11 +591,6 @@ static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
 #define NL_RATIO 75
 #define DEFAULT_HISPEED_LOAD 90
 #define DEFAULT_CPU0_RTG_BOOST_FREQ 1000000
-#define DEFAULT_CPU0_DVFS_HEADROOM 125
-#define DEFAULT_CPU4_DVFS_HEADROOM 120
-#define DEFAULT_CPU7_DVFS_HEADROOM 110
-#define MIN_DVFS_HEADROOM 100
-#define MAX_DVFS_HEADROOM 150
 #define DEFAULT_CPU4_RTG_BOOST_FREQ 0
 #define DEFAULT_CPU7_RTG_BOOST_FREQ 0
 static void sugov_walt_adjust(struct sugov_cpu *sg_cpu, unsigned long *util,
@@ -963,28 +955,6 @@ static ssize_t hispeed_load_store(struct gov_attr_set *attr_set,
 	return count;
 }
 
-static ssize_t dvfs_headroom_show(struct gov_attr_set *attr_set, char *buf)
-{
-	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
-
-	return scnprintf(buf, PAGE_SIZE, "%u\n", tunables->dvfs_headroom);
-}
-
-static ssize_t dvfs_headroom_store(struct gov_attr_set *attr_set,
-				   const char *buf, size_t count)
-{
-	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
-	unsigned int val;
-
-	if (kstrtouint(buf, 10, &val))
-		return -EINVAL;
-
-	tunables->dvfs_headroom = clamp(val, (unsigned int)MIN_DVFS_HEADROOM,
-					(unsigned int)MAX_DVFS_HEADROOM);
-
-	return count;
-}
-
 static ssize_t hispeed_freq_show(struct gov_attr_set *attr_set, char *buf)
 {
 	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
@@ -1070,7 +1040,6 @@ static struct governor_attr down_rate_limit_us = __ATTR_RW(down_rate_limit_us);
 static struct governor_attr hispeed_load = __ATTR_RW(hispeed_load);
 static struct governor_attr hispeed_freq = __ATTR_RW(hispeed_freq);
 static struct governor_attr rtg_boost_freq = __ATTR_RW(rtg_boost_freq);
-static struct governor_attr dvfs_headroom = __ATTR_RW(dvfs_headroom);
 static struct governor_attr pl = __ATTR_RW(pl);
 
 static struct attribute *sugov_attrs[] = {
@@ -1079,7 +1048,6 @@ static struct attribute *sugov_attrs[] = {
 	&hispeed_load.attr,
 	&hispeed_freq.attr,
 	&rtg_boost_freq.attr,
-	&dvfs_headroom.attr,
 	&pl.attr,
 	NULL
 };
@@ -1203,7 +1171,6 @@ static void sugov_tunables_save(struct cpufreq_policy *policy,
 	cached->pl = tunables->pl;
 	cached->hispeed_load = tunables->hispeed_load;
 	cached->rtg_boost_freq = tunables->rtg_boost_freq;
-	cached->dvfs_headroom = tunables->dvfs_headroom;
 	cached->hispeed_freq = tunables->hispeed_freq;
 	cached->up_rate_limit_us = tunables->up_rate_limit_us;
 	cached->down_rate_limit_us = tunables->down_rate_limit_us;
@@ -1227,7 +1194,6 @@ static void sugov_tunables_restore(struct cpufreq_policy *policy)
 	tunables->pl = cached->pl;
 	tunables->hispeed_load = cached->hispeed_load;
 	tunables->rtg_boost_freq = cached->rtg_boost_freq;
-	tunables->dvfs_headroom = cached->dvfs_headroom;
 	tunables->hispeed_freq = cached->hispeed_freq;
 	tunables->up_rate_limit_us = cached->up_rate_limit_us;
 	tunables->down_rate_limit_us = cached->down_rate_limit_us;
@@ -1288,15 +1254,12 @@ static int sugov_init(struct cpufreq_policy *policy)
 	default:
 	case 0:
 		tunables->rtg_boost_freq = DEFAULT_CPU0_RTG_BOOST_FREQ;
-		tunables->dvfs_headroom = DEFAULT_CPU0_DVFS_HEADROOM;
 		break;
 	case 4:
 		tunables->rtg_boost_freq = DEFAULT_CPU4_RTG_BOOST_FREQ;
-		tunables->dvfs_headroom = DEFAULT_CPU4_DVFS_HEADROOM;
 		break;
 	case 7:
 		tunables->rtg_boost_freq = DEFAULT_CPU7_RTG_BOOST_FREQ;
-		tunables->dvfs_headroom = DEFAULT_CPU7_DVFS_HEADROOM;
 		break;
 	}
 
