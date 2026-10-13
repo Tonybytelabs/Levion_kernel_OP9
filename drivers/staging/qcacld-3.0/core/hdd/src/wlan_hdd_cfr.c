@@ -348,7 +348,7 @@ wlan_cfg80211_cfr_set_config(struct wlan_objmgr_vdev *vdev,
 	return 0;
 }
 
-#ifdef WLAN_CFR_ADRASTEA
+#if defined(WLAN_CFR_ADRASTEA) || defined(WLAN_ENH_CFR_ENABLE)
 static QDF_STATUS
 wlan_cfg80211_peer_cfr_capture_cfg_adrastea(struct hdd_adapter *adapter,
 					    struct nlattr **tb)
