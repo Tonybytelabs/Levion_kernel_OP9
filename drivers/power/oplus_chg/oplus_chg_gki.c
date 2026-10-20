@@ -452,6 +452,9 @@ static int battery_psy_get_prop(struct power_supply *psy,
 		rc = oplus_chg_mod_get_property(ogdev->batt_ocm,
 			OPLUS_CHG_PROP_CURRENT_NOW,
 			(union oplus_chg_mod_propval *)pval);
+		/* the battery ocm reports mA, power_supply expects uA */
+		if (rc == 0)
+			pval->intval *= 1000;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		rc = oplus_chg_mod_get_property(ogdev->batt_ocm,
